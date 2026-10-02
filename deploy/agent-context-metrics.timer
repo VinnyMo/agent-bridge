@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh public agent-context metrics every five minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=agent-context-metrics.service
+
+[Install]
+WantedBy=timers.target

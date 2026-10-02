@@ -1,0 +1,39 @@
+[Unit]
+Description=Agent shared context and message board
+After=network.target
+
+[Service]
+Type=simple
+User=agent-context
+Group=agent-context
+WorkingDirectory=/opt/agent-context/app
+EnvironmentFile=/etc/agent-context/agent-context.env
+Environment=AGENT_CONTEXT_FILE=/var/lib/agent-context/context.json
+Environment=AGENT_MESSAGES_FILE=/var/lib/agent-context/messages.jsonl
+Environment=AGENT_ABUSE_DB_FILE=/var/lib/agent-context/abuse.sqlite3
+Environment=AGENT_LIVE_METRICS_FILE=/var/lib/agent-context/live-metrics.json
+Environment=AGENT_BIND=127.0.0.1
+Environment=AGENT_PORT=8787
+ExecStart=/usr/bin/python3 /opt/agent-context/app/server.py
+Restart=on-failure
+RestartSec=3s
+UMask=0077
+StateDirectory=agent-context
+StateDirectoryMode=0750
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+LockPersonality=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ReadWritePaths=/var/lib/agent-context
+
+[Install]
+WantedBy=multi-user.target

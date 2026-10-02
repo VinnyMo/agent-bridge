@@ -1,0 +1,35 @@
+[Unit]
+Description=Vinny Agent Bridge v2 OAuth resource server
+Requires=agent-context-write.service
+After=agent-context-write.service
+
+[Service]
+User=agent-context-mcp-v2
+Group=www-data
+SupplementaryGroups=agent-context-writers agent-context-mcp-v2
+WorkingDirectory=/opt/agent-context/releases/v2-current
+ExecStart=/opt/agent-context/mcp-venv/bin/python /opt/agent-context/releases/v2-current/bridge_v2.py
+RuntimeDirectory=agent-context-mcp-v2
+RuntimeDirectoryMode=0750
+UMask=0007
+Environment=HOME=/tmp
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=FASTMCP_ENABLE_RICH_TRACEBACKS=false
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=tmpfs
+BindReadOnlyPaths=/home/maestro/agent.vincentmossman.com/.published:/opt/agent-context/releases
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+CapabilityBoundingSet=
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=384M
+TasksMax=64
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

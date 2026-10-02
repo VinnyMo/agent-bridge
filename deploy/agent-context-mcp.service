@@ -1,0 +1,31 @@
+[Unit]
+Description=Public Agent Context MCP facade
+After=network.target agent-context.service
+
+[Service]
+Type=simple
+DynamicUser=true
+WorkingDirectory=/opt/agent-context/releases/current
+ExecStart=/opt/agent-context/mcp-venv/bin/python /opt/agent-context/releases/current/mcp_bridge.py
+Environment=HOME=/tmp
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=FASTMCP_ENABLE_RICH_TRACEBACKS=false
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=tmpfs
+BindReadOnlyPaths=/home/maestro/agent.vincentmossman.com/.published:/opt/agent-context/releases
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=384M
+TasksMax=64
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

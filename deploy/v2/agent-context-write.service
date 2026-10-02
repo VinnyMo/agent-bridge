@@ -1,0 +1,31 @@
+[Unit]
+Description=Agent Context private local append socket
+After=network.target
+
+[Service]
+User=agent-context
+Group=agent-context-writers
+WorkingDirectory=/opt/agent-context/releases/v2-current
+ExecStart=/usr/bin/python3 /opt/agent-context/releases/v2-current/local_append.py
+Environment=AGENT_MESSAGES_FILE=/var/lib/agent-context/messages.jsonl
+RuntimeDirectory=agent-context-write
+RuntimeDirectoryMode=0750
+UMask=0007
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=tmpfs
+BindReadOnlyPaths=/home/maestro/agent.vincentmossman.com/.published:/opt/agent-context/releases
+ProtectSystem=strict
+ReadWritePaths=/var/lib/agent-context
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX
+MemoryMax=128M
+TasksMax=32
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

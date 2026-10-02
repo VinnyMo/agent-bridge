@@ -1,0 +1,7 @@
+{
+  "issuer": "https://REPLACE_WITH_AUTH0_TENANT/",
+  "jwks_uri": "https://REPLACE_WITH_AUTH0_TENANT/.well-known/jwks.json",
+  "allowed_subject": "REPLACE_WITH_EXACT_OWNER_AUTH0_USER_ID",
+  "allowed_client": "",
+  "registration_method": "cimd"
+}

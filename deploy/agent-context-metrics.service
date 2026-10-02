@@ -1,0 +1,27 @@
+[Unit]
+Description=Refresh coarse public agent-context host metrics
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=agent-context
+Group=agent-context
+Environment=AGENT_LIVE_METRICS_FILE=/var/lib/agent-context/live-metrics.json
+ExecStart=/usr/bin/python3 /opt/agent-context/app/scripts/update_live_metrics.py
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+LockPersonality=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ReadWritePaths=/var/lib/agent-context
+TimeoutStartSec=45s
