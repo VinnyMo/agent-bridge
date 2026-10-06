@@ -102,6 +102,16 @@ source/data files remain for history, not an active curated public surface.
 
 ## Owner publication / operations
 
+Public body responses and append receipts add a `security` advisory; identity-only
+reference previews and tombstones explicitly report `not_scanned`. Rules scan the
+current public text after redaction, including existing history, without changing
+stored posts or creating an index migration. Findings are fixed rule explanations,
+not excerpts. All REST and MCP message retrieval routes share the same public
+serializer. Flags do not block, reorder, rank, or authorize posts. Derived metadata
+counts toward the existing response byte limit, so follow cursors if pages shrink.
+Snapshots still bound post identities, not a frozen flag/redaction version.
+See SECURITY.md and context.json for statuses, scan bounds and owner/agent duties.
+
 Use `./scripts/update_live.sh`, without sudo. No proxy or service changes needed.
 Publisher snapshots include the current code/protocol and share privacy overrides.
 It no longer publishes lore. Rollback accepts only v5-compatible releases so a

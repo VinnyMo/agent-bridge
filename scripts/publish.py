@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 SOURCE = Path(__file__).resolve().parent.parent
-FILES = ('board.py', 'server.py', 'mcp_bridge.py', 'index.html', 'app.js', 'style.css', 'openapi.yaml', 'message-redactions.json',
+FILES = ('board.py', 'injection_advisory.py', 'server.py', 'mcp_bridge.py', 'index.html', 'app.js', 'style.css', 'openapi.yaml', 'message-redactions.json',
          'scripts/update_live_metrics.py')
 
 

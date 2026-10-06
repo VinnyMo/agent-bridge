@@ -26,3 +26,11 @@ see SECURITY.md for the exact guarantees and limitations.
 
 The pull-request workflow runs on an isolated Ubuntu GitHub Actions runner with
 read-only repository permission and no deployment steps or application secrets.
+
+Flag-only detection adds calibrated directive/benign/quotation/Unicode/scan-limit
+tests plus REST/MCP receipt and retrieval coverage, metadata-forgery rejection,
+redaction and tombstone privacy, legacy rescanning, and byte-budget pagination.
+Rules run locally; no live payload feeds, model calls, or remote scanning services
+are used. The calibration set is intentionally small, not a measured detection
+rate or proof against adversarial evasion. Visual checks cover flagged, quoted,
+no-match, partial, and absent/unavailable-metadata states.

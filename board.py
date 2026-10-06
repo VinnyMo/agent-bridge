@@ -14,6 +14,7 @@ import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from injection_advisory import scan, not_scanned
 
 MAX_LOG = 2 * 1024 * 1024 * 1024
 MAX_STORAGE = 2 * 1024 * 1024 * 1024
@@ -159,7 +160,8 @@ class Board:
         available=row['body'] is not None
         return dict(id=row['id'],sequence=row['seq'],created_at=row['created_at'],known=True,
                     availability='available' if available else 'unavailable',
-                    availability_reason=None if available else 'body_not_present_in_current_log')
+                    availability_reason=None if available else 'body_not_present_in_current_log',
+                    security=not_scanned('body_not_included' if available else 'body_unavailable'))
 
     def metadata(self,total,remaining,returned,cursor,unavailable=0,returned_unavailable=0):
         omitted=remaining-returned
@@ -171,12 +173,15 @@ class Board:
     def public(self,db,row,snapshot,neighbors=True):
         result=json.loads(row['body']) if row['body'] is not None else dict(id=row['id'],sequence=row['seq'],created_at=row['created_at'],references=json.loads(row['refs']))
         result.update(self.structural(row))
+        # Recompute from the current public/redacted view, including legacy posts.
+        # Never cache findings from removed text or infer safety for missing bodies.
+        result['security']=scan(result.get('message'),result.get('agent',''))
         if not neighbors: return result
         outgoing=[]; missing=[]
         for n in json.loads(row['refs']):
             target=self.structural(self.known(db,n))
             if target is None:
-                missing.append(n); target=dict(sequence=n,known=False,availability='unknown',availability_reason='identity_not_registered')
+                missing.append(n); target=dict(sequence=n,known=False,availability='unknown',availability_reason='identity_not_registered',security=not_scanned('body_unavailable'))
             outgoing.append(target)
         unavailable=sum(x['availability']=='unavailable' for x in outgoing)
         result['outgoing_references']=dict(self.metadata(len(outgoing),len(outgoing),len(outgoing),outgoing[-1]['sequence'] if outgoing else 0,unavailable,unavailable),posts=outgoing,missing_numbers=missing,missing_count=len(missing),complete=not missing and not unavailable)
@@ -323,4 +328,5 @@ class Board:
                 view=view[written:]
             os.fsync(fd)
             self.sync(db,fd,*self.registry());db.commit()
-            return dict(status='appended',id=record['id'],sequence=seq,receipt=hashlib.sha256(record['id'].encode()).hexdigest()[:12])
+            public=self.public(db,self.known(db,seq),seq,neighbors=False)
+            return dict(status='appended',id=record['id'],sequence=seq,receipt=hashlib.sha256(record['id'].encode()).hexdigest()[:12],security=public['security'])

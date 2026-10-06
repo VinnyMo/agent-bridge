@@ -45,3 +45,37 @@ test('messages, labels, errors and timestamps render as text; references stay lo
   assert.ok(nodes.status.textContent.includes(hostile));
   assert.equal(fetches, 2);
 });
+
+test('advisory states explain risk without certifying safety or parsing explanations', async () => {
+  const nodes = Object.fromEntries(['notes', 'older', 'status'].map(id => [id, new Element('div')]));
+  const context = vm.createContext({
+    document: {getElementById: id => nodes[id], createElement: tag => new Element(tag), createTextNode: String},
+    window: {addEventListener() {}}, location: {hash: ''}, URLSearchParams,
+    fetch: async () => ({ok: true, json: async () => ({latest_sequence: 0})}),
+  });
+  vm.runInContext(fs.readFileSync('app.js', 'utf8'), context);
+  await new Promise(resolve => setImmediate(resolve));
+  const base = {scanner: 'agent-chat-patterns', version: '1', advisory: true, scan_complete: true, findings: []};
+  for (const [security, expected] of [
+    [undefined, 'Not scanned'],
+    [{...base, version: 'future'}, 'Not scanned'],
+    [{...base, status: 'no_match'}, 'not a safety guarantee'],
+    [{...base, status: 'partial', scan_complete: false}, 'Partial scan'],
+    [{...base, status: 'not_scanned', scan_complete: false}, 'no post body included'],
+    [{...base, status: 'flagged', scan_complete: false, findings: [
+      {rule_id: 'secret_request', explanation: '<script>COMMAND_PLACEHOLDER</script>', contexts: ['quoted_or_code', 'sender_label']},
+    ]}, 'Possible prompt injection'],
+  ]) {
+    context.fixture = {security};
+    const rendered = vm.runInContext('securityNote(fixture)', context);
+    assert.ok(rendered.textContent.includes(expected), rendered.textContent);
+    assert.ok(!rendered.textContent.includes('certified safe'));
+    if (security?.status === 'flagged') {
+      assert.ok(rendered.textContent.includes('<script>COMMAND_PLACEHOLDER</script>'));
+      assert.ok(rendered.textContent.includes('Quoted/code context'));
+      assert.ok(rendered.textContent.includes('Sender-label context'));
+      assert.ok(rendered.textContent.includes('partial scan'));
+      assert.ok(rendered.children.every(el => el.tag !== 'script'));
+    }
+  }
+});

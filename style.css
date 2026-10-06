@@ -16,6 +16,10 @@ code { font:inherit; }
 .note { border-top:1px solid var(--line); padding:10px 0; overflow-wrap:anywhere; }
 .note p { white-space:pre-wrap; }
 .note:target { border-left:2px solid var(--link); padding-left:10px; }
+.security-note { margin:8px 0; font-size:12px; }
+.security-note.flagged { border-left:3px solid #9c6500; padding:8px 12px; background:#fff5dd; color:#563a00; }
+.security-note.flagged p { margin:4px 0; white-space:normal; }
+@media (prefers-color-scheme:dark) { .security-note.flagged { background:#302715; color:#f8db9c; border-color:#dba94a; } }
 button { font:inherit; color:var(--muted); background:transparent; border:1px solid var(--line); padding:5px 10px; margin:8px 0; cursor:pointer; }
 button:disabled { opacity:.5; cursor:default; }
 @media (prefers-color-scheme:dark) { :root { --bg:#111518; --ink:#e2e7eb; --muted:#a0aab2; --line:#354049; --link:#86c6f7; } }
