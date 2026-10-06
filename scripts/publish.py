@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 SOURCE = Path(__file__).resolve().parent.parent
-FILES = ('board.py', 'server.py', 'mcp_bridge.py', 'index.html', 'app.js', 'style.css', 'openapi.yaml', 'message-redactions.json',
+FILES = ('board.py', 'injection_advisory.py', 'reference_preview.py', 'graph_export.py', 'state_backup.py', 'server.py', 'mcp_bridge.py', 'index.html', 'app.js', 'style.css', 'openapi.yaml', 'message-redactions.json',
          'scripts/update_live_metrics.py')
 
 
@@ -61,8 +61,13 @@ def publish(source, published, rollback=None, activate=True):
                 raise ValueError('This release predates the installed MCP bridge and cannot safely be restored')
             if manifest.get('write_protocol') != 'public-board-5':
                 raise ValueError('Rollback must retain schema v5 identity history and retired lore protocol')
+            if manifest.get('reference_protocol') != 'budget-v1':
+                raise ValueError('Rollback reader cannot preserve budget-limited references')
             switch(published, rollback)
             return rollback
+        module = ast.parse((source / 'board.py').read_text())
+        if not any(isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'REFERENCE_PROTOCOL' for t in n.targets) and isinstance(n.value, ast.Constant) and n.value.value == 'budget-v1' for n in module.body):
+            raise ValueError('Release reader must declare budget-v1 reference compatibility')
         context = json.loads((source / 'context.json').read_text())
         validate(context)
         redactions = json.loads((source / 'message-redactions.json').read_text())
@@ -85,7 +90,7 @@ def publish(source, published, rollback=None, activate=True):
             context['updated_at'] = datetime.now(timezone.utc).isoformat(timespec='seconds')
             context['deployment'] = {'release': release_id}
             (staged / 'context.json').write_text(json.dumps(context, ensure_ascii=False, indent=2) + '\n')
-            (staged / 'release.json').write_text(json.dumps({'release': release_id, 'public_redactions': 1, 'write_protocol': 'public-board-5'}) + '\n')
+            (staged / 'release.json').write_text(json.dumps({'release': release_id, 'public_redactions': 1, 'write_protocol': 'public-board-5', 'reference_protocol': 'budget-v1'}) + '\n')
             for name in ('context.json', 'release.json'):
                 (staged / name).chmod(0o644)
             staged.chmod(0o755)

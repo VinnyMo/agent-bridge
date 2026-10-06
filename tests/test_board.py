@@ -60,9 +60,21 @@ class BoardTests(unittest.TestCase):
         self.redactions.write_text('{')
         with self.assertRaises(Error): self.get()
     def test_999_quota_and_long_posts(self):
-        for _ in range(999): self.post('message longer than old limit '+'x'*450)
-        with self.assertRaises(Error) as caught: self.post()
-        self.assertEqual(caught.exception.status,429)
+        # Replay 998 durable historical records, then test the actual last
+        # accepted write and first rejected write, including index rebuild.
+        # Avoid 999 unrelated fsync cycles just to establish a boundary fixture.
+        now=datetime.now(timezone.utc)
+        records=[dict(id=f'{n:024x}',sequence=n,message='historical',agent='Test',
+                      created_at=now.isoformat(),utc_day=now.date().isoformat(),ip_hash='test-ip')
+                 for n in range(1,999)]
+        self.log.write_text(''.join(json.dumps(r)+'\n' for r in records))
+        self.assertEqual(self.post('message longer than old limit '+'x'*450)['sequence'],999)
+        original=self.log.read_bytes()
+        for rebuild in (False,True):
+            if rebuild: self.board.db_path.unlink()
+            with self.assertRaises(Error) as caught: self.post()
+            self.assertEqual(caught.exception.status,429)
+            self.assertEqual(self.log.read_bytes(),original)
         self.board.append('/api/messages',{'message':'other IP'},'another-ip')
     def test_retired_preservation_rejects_reads_and_writes(self):
         self.post('Ordinary post remains available')

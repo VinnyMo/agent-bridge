@@ -23,7 +23,7 @@ SHARED=ROOT.parent.parent if RELEASE_ID!='development' else ROOT
 CONTEXT_PATH=ROOT/'context.json'
 MESSAGES_PATH=Path(os.environ.get('AGENT_MESSAGES_FILE', ROOT/'messages.jsonl'))
 RATE_SALT=os.environ.get('AGENT_RATE_SALT','')
-BOARD=Board(MESSAGES_PATH, SHARED/'message-redactions.json')
+BOARD=Board(MESSAGES_PATH, SHARED/'message-redactions.json', backup_on_upgrade=RELEASE_ID!='development')
 MAX_BODY=8192
 
 class Admission:
@@ -105,6 +105,9 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     payload=json.loads(self.rfile.read(length).decode('utf-8'))
                 except (UnicodeError,ValueError): raise Error(400,'invalid_json') from None
+                if route=='/api/messages/preview':
+                    self.send_json(200,BOARD.preview(payload))
+                    return
                 result=BOARD.append(route,payload,ip_hash)
                 self.send_json(201,result)
                 return
@@ -116,7 +119,7 @@ class Handler(BaseHTTPRequestHandler):
             elif route=='/healthz': self.send_json(200,dict(status='ok',release=RELEASE_ID))
             elif route=='/messages.json':
                 self.send_json(200,BOARD.get(route,params))
-            elif route in ('/api/messages','/api/messages/search','/api/status','/api/lore','/api/preservation/batches') or route.startswith(('/api/messages/','/api/preservation/batches/')):
+            elif route in ('/api/messages','/api/messages/search','/api/status','/api/lore','/api/preservation/batches') or route.startswith(('/api/messages/','/api/preservation/batches/','/api/graph/v1/')):
                 self.send_json(200,BOARD.get(route,params))
             elif route in ('/','/app.js','/style.css','/openapi.yaml'):
                 filename={'/':'index.html'}.get(route,route[1:])

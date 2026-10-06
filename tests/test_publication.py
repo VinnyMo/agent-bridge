@@ -16,13 +16,23 @@ spec.loader.exec_module(publisher)
 
 
 class Publication(unittest.TestCase):
+    def setUp(self):
+        self.source_tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.source_tmp.cleanup)
+        self.source = Path(self.source_tmp.name)
+        for relative in publisher.FILES + ('context.json',):
+            dest = self.source / relative
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            origin = ROOT / ('message-redactions.example.json' if relative == 'message-redactions.json' else relative)
+            dest.write_bytes(origin.read_bytes())
+
     def test_staging_preserves_production_and_incompatible_rollback_is_denied(self):
         with tempfile.TemporaryDirectory() as tmp:
             published=Path(tmp)/'published'
-            first=publisher.publish(ROOT,published)
+            first=publisher.publish(self.source,published)
             marker=(published/'restart').read_bytes()
             registry=(published/'message-redactions.json').read_bytes()
-            staged=publisher.publish(ROOT,published,activate=False)
+            staged=publisher.publish(self.source,published,activate=False)
             self.assertNotEqual(first,staged)
             self.assertEqual((published/'current').resolve().name,first)
             self.assertEqual((published/'restart').read_bytes(),marker)
@@ -30,8 +40,23 @@ class Publication(unittest.TestCase):
             manifest=published/'releases'/first/'release.json'
             data=json.loads(manifest.read_text()); data.pop('write_protocol')
             manifest.write_text(json.dumps(data))
-            with self.assertRaisesRegex(ValueError,'project-free public board'):
-                publisher.publish(ROOT,published,rollback=first)
+            with self.assertRaisesRegex(ValueError,'schema v5 identity history'):
+                publisher.publish(self.source,published,rollback=first)
+
+    def test_old_reference_reader_cannot_be_staged_or_rolled_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            published = Path(tmp) / 'published'
+            release = publisher.publish(self.source, published)
+            manifest_path = published / 'releases' / release / 'release.json'
+            manifest = json.loads(manifest_path.read_text())
+            manifest.pop('reference_protocol')
+            manifest_path.write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(ValueError, 'Rollback reader'):
+                publisher.publish(self.source, published, rollback=release)
+            path = self.source / 'board.py'
+            path.write_text(path.read_text().replace('REFERENCE_PROTOCOL = "budget-v1"', 'REFERENCE_PROTOCOL = "old"'))
+            with self.assertRaisesRegex(ValueError, 'Release reader'):
+                publisher.publish(self.source, published)
 
     def test_invalid_release_does_not_replace_current_and_rollback_preserves_snapshots(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -41,7 +66,7 @@ class Publication(unittest.TestCase):
             for relative in publisher.FILES + ('context.json',):
                 dest=source/relative
                 dest.parent.mkdir(parents=True,exist_ok=True)
-                dest.write_bytes((ROOT/relative).read_bytes())
+                dest.write_bytes((self.source/relative).read_bytes())
             published=base/'published'
             first=publisher.publish(source,published)
             original=(published/'current/context.json').read_bytes()
@@ -66,7 +91,7 @@ class Publication(unittest.TestCase):
         import socket
         with tempfile.TemporaryDirectory() as tmp:
             base=Path(tmp)
-            release=publisher.publish(ROOT,base/'published')
+            release=publisher.publish(self.source,base/'published')
             folder=base/'published/releases'/release
             with socket.socket() as sock:
                 sock.bind(('127.0.0.1',0))
