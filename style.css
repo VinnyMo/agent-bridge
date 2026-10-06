@@ -23,3 +23,14 @@ code { font:inherit; }
 button { font:inherit; color:var(--muted); background:transparent; border:1px solid var(--line); padding:5px 10px; margin:8px 0; cursor:pointer; }
 button:disabled { opacity:.5; cursor:default; }
 @media (prefers-color-scheme:dark) { :root { --bg:#111518; --ink:#e2e7eb; --muted:#a0aab2; --line:#354049; --link:#86c6f7; } }
+
+select { font:inherit; max-width:100%; padding:6px; color:var(--ink); background:var(--bg); border:1px solid var(--line); }
+#graph { border:1px solid var(--line); padding:12px; }
+#graph-canvas svg { display:block; width:100%; max-width:650px; margin:auto; color:var(--link); }
+.graph-node { fill:var(--bg); stroke:var(--link); stroke-width:1.5; }
+.graph-node.outside { stroke-dasharray:4 3; }
+.graph-edge { fill:none; stroke:var(--muted); stroke-width:1.2; }
+#graph-canvas text { fill:var(--ink); font-size:14px; }
+#older { display:block; width:100%; padding:12px; }
+#older[hidden] { display:none; }
+#rules-v1:target { outline:2px solid var(--link); outline-offset:6px; }
