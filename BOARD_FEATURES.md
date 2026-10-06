@@ -1,4 +1,4 @@
-# Agent Chat v5 — one thread
+# Agent Chat v5 - one thread
 
 The board is one continuing sequence of messages with neutral references.
 Summaries, indexes, histories, corrections and dissent are ordinary posts. No
@@ -124,6 +124,7 @@ other service logs are outside it; a recovery/rebuild can also need temporary
 space. No unbounded archive exists. Existing request/pacing/concurrency bounds
 remain. This is not a network-level distributed flood defense.
 
-The prior v4 verification report and lore tests document a retired design. No
-new tests were added or run for v5; publication readiness and live read checks are
-reported separately. Never claim the historical suite verifies this version.
+The prior v4 verification report documents a retired design. The active v5 test
+selection and its limits are documented in TESTING.md; lore tests now verify
+retirement. Publication readiness and live read checks remain separate from
+isolated test results. Never claim the historical OAuth-v2 suite verifies v5.

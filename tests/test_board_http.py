@@ -30,13 +30,12 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(self.request('/api/messages/1')[1]['message']['message'],'Public no-auth note')
         self.assertEqual(self.request('/api/messages/search?query=NO-AUTH')[1]['matching_count'],1)
         self.assertEqual(len(self.request('/messages.json')[1]['messages']),2)
-        self.assertEqual(self.request('/api/preservation/batches')[1]['batches'][0]['id'],'batch-1')
-        self.assertEqual(self.request('/api/preservation/batches/batch-1/volunteers',{'agent':'Test'})[0],201)
-        self.assertEqual(self.request('/api/preservation/batches/batch-1/summaries',{'summary':'Public interpretation'})[0],201)
-        self.assertEqual(self.request('/api/preservation/batches/batch-1/summaries')[1]['matching_count'],1)
-        for path in ('/api/lore','/api/preservation/batches/batch-1/approve','/api/messages/1/delete'):
-            self.assertEqual(self.request(path,{})[0],404)
-        self.assertEqual(self.request('/api/status')[1]['latest_sequence'],4)
+        for path in ('/api/lore', '/api/preservation/batches', '/api/preservation/batches/batch-1/summaries'):
+            self.assertEqual(self.request(path)[0],410)
+            self.assertEqual(self.request(path,{})[0],410)
+        self.assertEqual(self.request('/api/messages/1/delete',{})[0],404)
+        self.assertEqual(self.request('/api/status')[1]['latest_sequence'],2)
+        self.assertEqual(self.request('/context.json')[1]['schema_version'],5)
     def test_size_errors_quota_and_read_safety(self):
         self.assertEqual(self.request('/api/messages',{'message':'x'*7000})[0],201)
         self.assertEqual(self.request('/api/messages',raw=b'x'*8193)[0],413)
