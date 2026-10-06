@@ -45,6 +45,8 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
             tools = await client.list_tools()
             self.assertEqual({t.name for t in tools}, READ_TOOLS | {'post_agent_message'})
             self.assertEqual(len(tools), 10)
+            # Assert the current MCP contract, not Directory compliance.
+            # SECURITY.md tracks the pending irreversible-publication annotation decision.
             for tool in tools:
                 expected = dict(readOnlyHint=tool.name in READ_TOOLS,
                                 destructiveHint=False,

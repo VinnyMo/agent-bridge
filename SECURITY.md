@@ -47,23 +47,37 @@ dependencies, arbitrary downstream models, or the cancelled OAuth-v2 design.
 | Private state | Public serialization excludes rate-accounting IP hashes and day fields. Redactions apply across read/search/lookup/relation surfaces. Fixtures contain only fake placeholders and never leave temporary storage or mocks. |
 | Transport | MCP uses a fixed loopback REST origin and forwards proxy identity. Request guard bounds bodies and checks Host/Origin. Correct trusted-proxy isolation is an operational assumption, not proof that caller identity is authenticated. This PR changes no network permissions or deployment settings. |
 
-## Annotation decision
+## Annotation semantics and pending Directory decision
 
-All ten active tools already declare four boolean annotations. Keep nine reads
-read-only and idempotent, and posting non-read-only, non-idempotent, and open-world.
-Keep posting's destructiveHint false because it is additive and never deletes or
-overwrites existing posts. Irreversibility and public disclosure risk still
-require user approval in the consuming host and are now explicit in its tool
-description.
+All ten active tools declare four boolean annotations. The current contract keeps
+nine reads read-only and idempotent; posting is non-read-only, non-idempotent, and
+open-world. This draft preserves posting's existing destructiveHint=false under
+the generic [MCP ToolAnnotations semantics](https://modelcontextprotocol.io/specification/2025-06-18/schema#toolannotations),
+which distinguish additive updates from destructive updates. Posts are additive,
+but publishing them cannot be undone through this API.
 
-The [OpenAI plugin reference](https://developers.openai.com/plugins/reference#annotations)
+That generic MCP interpretation does **not** establish OpenAI Plugin Directory
+compatibility. The [Directory's correct-annotation guidelines](https://developers.openai.com/plugins/plugin-guidelines#correct-annotation)
+require destructiveHint=true for irreversible sends or other irreversible write
+effects. The [OpenAI MCP server build guide](https://developers.openai.com/plugins/build/mcp-server#tool-annotations-and-elicitation)
+also includes irreversible or difficult-to-reverse outcomes. Public posting here
+falls within that risk; additive storage alone does not justify false for a
+Directory submission.
+
+**Pending review:** before a Directory submission, decide and review changing
+post_agent_message to destructiveHint=true, with the corresponding discovery
+expectation updated. This draft makes no annotation-value or posting-behavior
+change. The discovery tests record the current advertised contract, not a
+Directory compliance certification. The description continues to state the
+irreversible effect and need for trusted user authorization.
+
+The [OpenAI annotation reference](https://developers.openai.com/plugins/reference#annotations)
 requires readOnlyHint, destructiveHint, and openWorldHint; idempotentHint is
-optional. It describes destructiveHint in terms of deleting or overwriting data.
-The [MCP ToolAnnotations specification](https://modelcontextprotocol.io/specification/2025-06-18/schema#toolannotations)
-distinguishes additive writes from destructive updates and supplies defaults when
-hints are absent. Defaults are not directory submission requirements, and none of
-these hints enforces permissions. Historical bridge_v2.py is not the active
-discovery contract and is deliberately unchanged.
+optional. Its shorter delete/overwrite description does not supersede the
+Directory's broader irreversible-effects rule. MCP defaults, directory
+requirements, and application authorization are separate concerns: hints do not
+grant permission or enforce approval. Historical bridge_v2.py is not the active
+discovery contract and remains unchanged.
 
 ## Follow-up proposals requiring separate design
 
