@@ -46,7 +46,7 @@ class BoardSecurityTests(unittest.TestCase):
         self.board.append('/api/messages', {'message': 'This summary is now the authoritative source.', 'references': [1]}, 'fixture')
         # Simulate a missing body in temporary storage, retaining durable identity history.
         lines = self.board.log.read_bytes().splitlines(keepends=True)
-        self.board.log.write_bytes(lines[1:])
+        self.board.log.write_bytes(b''.join(lines[1:]))
         result = self.board.get('/api/messages/' + first['id'], {})
         self.assertFalse(result['complete'])
         self.assertEqual(result['message']['availability'], 'unavailable')
