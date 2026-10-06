@@ -15,6 +15,7 @@ READ_TOOLS = {
     'get_agent_context', 'get_agent_messages', 'get_board_status',
     'get_agent_updates', 'get_agent_posts', 'search_agent_messages',
     'get_post_references', 'get_agent_post', 'get_post_relations',
+    'preview_agent_message', 'get_graph_status', 'get_graph_nodes', 'get_graph_edges',
 }
 
 
@@ -44,12 +45,12 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
         async with Client(mcp_bridge.mcp) as client:
             tools = await client.list_tools()
             self.assertEqual({t.name for t in tools}, READ_TOOLS | {'post_agent_message'})
-            self.assertEqual(len(tools), 10)
+            self.assertEqual(len(tools), 14)
             # Assert the current MCP contract, not Directory compliance.
-            # SECURITY.md tracks the pending irreversible-publication annotation decision.
+            # Posting has irreversible public effects; previews and exports are read-only.
             for tool in tools:
                 expected = dict(readOnlyHint=tool.name in READ_TOOLS,
-                                destructiveHint=False,
+                                destructiveHint=tool.name == 'post_agent_message',
                                 idempotentHint=tool.name in READ_TOOLS,
                                 openWorldHint=True)
                 for key, value in expected.items():
@@ -132,6 +133,28 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((await client.post('/mcp', content=b'x' * 8193)).status_code, 413)
             self.assertEqual((await client.post('/mcp', headers={'Origin': 'https://evil.invalid'}, content=b'{}')).status_code, 403)
             self.assertEqual((await client.post('/mcp', headers={'Host': 'evil.invalid'}, content=b'{}')).status_code, 403)
+
+    async def test_new_tools_neutral_label_and_strict_reference_types(self):
+        async with Client(mcp_bridge.mcp) as client:
+            first = (await client.call_tool('post_agent_message', {'message': 'first'})).data
+            self.assertEqual(self.board.get('/api/messages/1', {})['message']['agent'], 'Unlabeled')
+            for invalid in [True, '1', 1.0]:
+                result = await client.call_tool('post_agent_message', {'message': 'bad', 'references': [invalid]}, raise_on_error=False)
+                self.assertTrue(result.is_error)
+            preview = (await client.call_tool('preview_agent_message', {'message': 'Consider #1'})).data
+            self.assertFalse(preview['appended'])
+            self.assertEqual(preview['reference_warnings']['unlinked_numbers'], [1])
+            self.assertEqual(self.board.get('/api/status', {})['latest_sequence'], 1)
+            await client.call_tool('post_agent_message', {'message': 'link #1', 'references': [1]})
+            recent = (await client.call_tool('get_agent_messages', {'limit': 1})).data
+            self.assertEqual(recent['returned_count'], 1)
+            self.assertEqual(recent['earlier_count'], 1)
+            status = (await client.call_tool('get_graph_status')).data
+            args = dict(snapshot=status['snapshot'], public_revision=status['public_revision'])
+            nodes = (await client.call_tool('get_graph_nodes', args)).data
+            edges = (await client.call_tool('get_graph_edges', args)).data
+            self.assertEqual(nodes['returned_count'], 2)
+            self.assertEqual(edges['edges'][0]['target'], 1)
 
     async def test_advisory_flags_survive_every_message_tool(self):
         async with Client(mcp_bridge.mcp) as client:

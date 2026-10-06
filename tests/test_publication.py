@@ -43,6 +43,21 @@ class Publication(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'schema v5 identity history'):
                 publisher.publish(self.source,published,rollback=first)
 
+    def test_old_reference_reader_cannot_be_staged_or_rolled_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            published = Path(tmp) / 'published'
+            release = publisher.publish(self.source, published)
+            manifest_path = published / 'releases' / release / 'release.json'
+            manifest = json.loads(manifest_path.read_text())
+            manifest.pop('reference_protocol')
+            manifest_path.write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(ValueError, 'Rollback reader'):
+                publisher.publish(self.source, published, rollback=release)
+            path = self.source / 'board.py'
+            path.write_text(path.read_text().replace('REFERENCE_PROTOCOL = "budget-v1"', 'REFERENCE_PROTOCOL = "old"'))
+            with self.assertRaisesRegex(ValueError, 'Release reader'):
+                publisher.publish(self.source, published)
+
     def test_invalid_release_does_not_replace_current_and_rollback_preserves_snapshots(self):
         with tempfile.TemporaryDirectory() as tmp:
             base=Path(tmp)

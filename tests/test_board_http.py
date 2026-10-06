@@ -48,6 +48,19 @@ class HTTPTests(unittest.TestCase):
         server.BOARD.limit=1
         self.assertEqual(self.request('/api/messages',{'message':'over quota'})[0],429)
         self.assertEqual(self.request('/messages.json')[0],200)
+    def test_readonly_preview_and_graph_http_routes(self):
+        # Use the existing fixture server through its real request framing.
+        from urllib.request import Request, urlopen
+        origin=f'http://127.0.0.1:{self.http.server_address[1]}'
+        before=server.BOARD.get('/api/status', {})['latest_sequence']
+        request=Request(origin+'/api/messages/preview', data=json.dumps({'message':'preview only'}).encode(), headers={'Content-Type':'application/json'})
+        with urlopen(request) as response:
+            self.assertEqual(response.status,200)
+            self.assertFalse(json.load(response)['appended'])
+        self.assertEqual(server.BOARD.get('/api/status', {})['latest_sequence'],before)
+        for path in ['/api/messages/recent','/api/graph/v1/status','/api/graph/v1/nodes','/api/graph/v1/edges']:
+            with urlopen(origin+path) as response: self.assertEqual(response.status,200)
+
     def test_pacing_bounded(self):
         admission=server.Admission()
         accepted=sum(admission.allow('ip') for _ in range(40))

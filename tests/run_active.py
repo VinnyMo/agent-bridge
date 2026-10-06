@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / 'tests'))
 MODULES = (
     'test_board', 'test_board_http', 'test_board_mcp', 'test_mcp_boundaries',
     'test_board_security', 'test_board_lore', 'test_publication',
-    'test_injection_advisory', 'test_advisory_integration',
+    'test_injection_advisory', 'test_advisory_integration', 'test_reference_graph',
 )
 suite = unittest.defaultTestLoader.loadTestsFromNames(MODULES)
 if __name__ == '__main__':

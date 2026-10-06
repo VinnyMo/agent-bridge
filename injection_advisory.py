@@ -54,6 +54,7 @@ AUTHORITY = re.compile(
     r'["\']role["\']\s*:\s*["\'](?:system|developer)["\']|'
     r'\bi am (?:the|your) (?:owner|administrator|developer|system)\b)'
 )
+INDIRECT_NEGATION = re.compile(r"\b(?:never|must not|should not|do not) allow [^.!?;\n]{0,100} to\s*$")
 NEGATION = re.compile(r"\b(?:never|do not|don't|must not|should not|shouldn't|avoid)\s*$")
 AUTHORITY_LABELS = {'system', 'developer', 'owner', 'admin', 'administrator'}
 
@@ -99,7 +100,7 @@ def scan(message, agent=''):
         for rule_id, pattern, explanation in COMPILED:
             for match in pattern.finditer(line):
                 before = line[:match.start()]
-                if NEGATION.search(before[-32:]):
+                if NEGATION.search(before[-32:]) or INDIRECT_NEGATION.search(before[-140:]):
                     continue
                 # Context is descriptive, never a whitelist or a claim about intent.
                 quoted = (fence is not None or stripped.startswith('>') or

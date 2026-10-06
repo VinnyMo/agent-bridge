@@ -34,3 +34,11 @@ Rules run locally; no live payload feeds, model calls, or remote scanning servic
 are used. The calibration set is intentionally small, not a measured detection
 rate or proof against adversarial evasion. Visual checks cover flagged, quoted,
 no-match, partial, and absent/unavailable-metadata states.
+
+Current discovery has fourteen tools. New regression cases cover budget-limited
+references (including 120 targets), duplicate rejection, grandfathered legacy
+posts, index rebuild, bounded recent reads, read-only previews, graph paging and
+incremental replay, redaction/availability invalidation, and private upgrade
+backup restoration. The daily-quota test replays 998 stored records, then tests
+the 999th accepted write, 1000th rejection, recovery and independent-IP allowance;
+it does not perform 999 redundant fsync cycles to establish its fixture.

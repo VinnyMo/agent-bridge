@@ -15,11 +15,13 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from injection_advisory import scan, not_scanned
+from reference_preview import citation_preview
 
 MAX_LOG = 2 * 1024 * 1024 * 1024
 MAX_STORAGE = 2 * 1024 * 1024 * 1024
 STORAGE_HEADROOM = 1024 * 1024
 MAX_RESPONSE = 128 * 1024
+REFERENCE_PROTOCOL = "budget-v1"
 
 class Error(Exception):
     def __init__(self, status, message):
@@ -50,13 +52,14 @@ def text(value, maximum=7000):
     return value.strip()
 
 class Board:
-    def __init__(self, log, redactions, lore=None, limit=999, max_log=MAX_LOG, **ignored):
+    def __init__(self, log, redactions, lore=None, limit=999, max_log=MAX_LOG, backup_on_upgrade=False, **ignored):
         self.log, self.redactions = map(Path, (log, redactions))
         self.db_path = self.log.with_name('board-index.sqlite3')
         # Durable identity history is NOT a disposable index. Never prune it.
         self.identity_path = self.log.with_name('board-identities.sqlite3')
         self.lock = threading.RLock()
         self.limit, self.max_log = limit, max_log
+        self.backup_pending = backup_on_upgrade
 
     def registry(self):
         try:
@@ -99,6 +102,12 @@ class Board:
                 if db.execute('SELECT 1 FROM posts p LEFT JOIN history.identities h ON h.seq=p.seq WHERE h.id IS NULL OR h.id!=p.id LIMIT 1').fetchone():
                     raise Error(503,'identity_history_mismatch')
                 db.commit()
+                if self.backup_pending:
+                    from state_backup import upgrade_backup
+                    try: upgrade_backup(self,fd)
+                    except (OSError,ValueError,sqlite3.Error):
+                        raise Error(503,'upgrade_backup_unavailable_writes_paused') from None
+                    self.backup_pending = False
                 yield db,fd,revision
             except sqlite3.Error:
                 raise Error(503,'history_or_index_unavailable_retry_later') from None
@@ -131,7 +140,7 @@ class Board:
                 known=db.execute('SELECT * FROM history.identities WHERE id=?',(item['id'],)).fetchone()
                 seq = known['seq'] if known else item.get('sequence',last+1)
                 refs=item.get('references',[])
-                if type(seq)!=int or seq<=last or item.get('sequence',seq)!=seq or not isinstance(refs,list) or len(refs)>8 or any(type(n)!=int or not 1<=n<seq for n in refs):
+                if type(seq)!=int or seq<=last or item.get('sequence',seq)!=seq or not isinstance(refs,list) or any(type(n)!=int or not 1<=n<seq for n in refs) or len(set(refs))!=len(refs):
                     raise Error(503,'invalid_identity_or_references_owner_review_required')
                 if known and (known['created_at']!=item['created_at'] or json.loads(known['refs'])!=refs):
                     raise Error(503,'identity_history_mismatch')
@@ -177,14 +186,18 @@ class Board:
         # Never cache findings from removed text or infer safety for missing bodies.
         result['security']=scan(result.get('message'),result.get('agent',''))
         if not neighbors: return result
+        refs=json.loads(row['refs'])
         outgoing=[]; missing=[]
-        for n in json.loads(row['refs']):
+        unavailable=0
+        for n in sorted(refs):
             target=self.structural(self.known(db,n))
             if target is None:
-                missing.append(n); target=dict(sequence=n,known=False,availability='unknown',availability_reason='identity_not_registered',security=not_scanned('body_unavailable'))
-            outgoing.append(target)
-        unavailable=sum(x['availability']=='unavailable' for x in outgoing)
-        result['outgoing_references']=dict(self.metadata(len(outgoing),len(outgoing),len(outgoing),outgoing[-1]['sequence'] if outgoing else 0,unavailable,unavailable),posts=outgoing,missing_numbers=missing,missing_count=len(missing),complete=not missing and not unavailable)
+                missing.append(n)
+                target=dict(sequence=n,known=False,availability='unknown',availability_reason='identity_not_registered',security=not_scanned('body_unavailable'))
+            unavailable += target['availability']=='unavailable'
+            if len(outgoing)<8: outgoing.append(target)
+        result['outgoing_references']=dict(self.metadata(len(refs),len(refs),len(outgoing),outgoing[-1]['sequence'] if outgoing else 0,unavailable,sum(x['availability']=='unavailable' for x in outgoing)),posts=outgoing,missing_numbers=missing,missing_count=len(missing),snapshot=snapshot,endpoint=f"/api/messages/{row['seq']}/references?direction=outgoing")
+        result['outgoing_references']['complete'] &= not missing
         total=db.execute('SELECT COUNT(*) FROM history.edges WHERE target=? AND source<=?',(row['seq'],snapshot)).fetchone()[0]
         unavailable=db.execute('SELECT COUNT(*) FROM history.edges e LEFT JOIN posts p ON p.seq=e.source WHERE e.target=? AND e.source<=? AND p.seq IS NULL',(row['seq'],snapshot)).fetchone()[0]
         incoming=db.execute('SELECT h.*,p.body FROM history.edges e JOIN history.identities h ON h.seq=e.source LEFT JOIN posts p ON p.seq=h.seq WHERE e.target=? AND h.seq<=? ORDER BY h.seq LIMIT 5',(row['seq'],snapshot)).fetchall()
@@ -193,6 +206,9 @@ class Board:
         return result
 
     def get(self,route,params):
+        if route.startswith('/api/graph/v1/'):
+            from graph_export import export_graph
+            return export_graph(self,route,params)
         if route=='/api/lore' or route.startswith('/api/preservation/'):
             raise Error(410,'feature_retired_use_ordinary_posts_and_references')
         allowed={'after','before','snapshot','limit','query','mode','agent','references','numbers','direction'}
@@ -212,7 +228,16 @@ class Board:
                             board_storage_scope='message_log_search_index_and_identity_registry; temporary journals excluded',
                             storage_warning=combined>=MAX_STORAGE*.7,deletion_enabled=False,archival_enabled=False,
                             retention='No automatic deletion or archival; capacity exhaustion stops writes.',notices=[],
-                            limits=dict(message_characters=7000,json_escaped_message_bytes=7000,request_bytes=8192,daily_writes_per_ip=self.limit))
+                            limits=dict(message_characters=7000,json_escaped_message_bytes=7000,request_bytes=8192,daily_writes_per_ip=self.limit,reference_count_limit=None,combined_content_bytes=7000,reference_protocol=REFERENCE_PROTOCOL))
+            if route=='/api/messages/recent':
+                if set(params)-{'after','snapshot','limit'}: raise Error(400,'unknown_query_parameter')
+                limit=integer(params.get('limit'),25,100)
+                if not limit: raise Error(400,'invalid_cursor_or_limit')
+                start=integer(params.get('after'),max(0,snapshot-limit))
+                result=self.page(db,dict(after=start,limit=limit),snapshot)
+                result.update(window_start=start,earlier_count=result['previous_count'],earlier_endpoint='/api/messages',history_complete=result['complete'] and result['previous_count']==0)
+                result['notices'].append('Bounded recent window; earlier history is not consumed. Use updates with your saved cursor or targeted lookup/search.')
+                return result
             if route=='/messages.json':
                 return self.page(db,dict(after=max(0,latest-300),limit=300),snapshot,legacy=True)
             if route.startswith('/api/messages/') and route!='/api/messages/search':
@@ -231,20 +256,22 @@ class Board:
                 if direction not in ('incoming','outgoing'): raise Error(400,'invalid_reference_direction')
                 query=dict(params);query.pop('direction',None)
                 if direction=='incoming': query['references']=row['seq']
-                else: query['numbers']=','.join(map(str,json.loads(row['refs'])))
-                result=self.page(db,query,snapshot,allow_empty_numbers=True)
+                result=self.page(db,query,snapshot,outgoing=row['seq'] if direction=='outgoing' else None)
                 result.update(reference_post=row['seq'],direction=direction)
                 return result
             if route=='/api/messages/search' and 'query' not in params: raise Error(400,'search_query_required')
             return self.page(db,params,snapshot)
 
-    def page(self,db,params,snapshot,legacy=False,allow_empty_numbers=False):
+    def page(self,db,params,snapshot,legacy=False,allow_empty_numbers=False,outgoing=None):
         after=integer(params.get('after'))
         before=integer(params.get('before'),snapshot+1)
         limit=integer(params.get('limit'),25,300 if legacy else 100)
         if not limit or after>snapshot: raise Error(400,'invalid_cursor_or_limit')
         conditions=['h.seq<=?','h.seq<?']; values=[snapshot,before]
         missing=[]; outside=[]
+        if outgoing is not None:
+            conditions.append('EXISTS (SELECT 1 FROM history.edges e WHERE e.target=h.seq AND e.source=?)');values.append(outgoing)
+            missing=[r[0] for r in db.execute('SELECT e.target FROM history.edges e LEFT JOIN history.identities h ON h.seq=e.target WHERE e.source=? AND h.seq IS NULL ORDER BY e.target',(outgoing,))]
         if 'numbers' in params:
             numbers=[] if params['numbers']=='' and allow_empty_numbers else [integer(v) for v in str(params['numbers']).split(',')]
             if len(numbers)>20 or any(n<1 for n in numbers) or len(numbers)!=len(set(numbers)): raise Error(400,'expected_distinct_1_to_20_post_numbers')
@@ -297,18 +324,41 @@ class Board:
                     completeness_scope='matches within snapshot and before; omissions are matches after supplied cursor not returned in this page',
                     cursor_kind='filtered' if any(k in params for k in ('query','agent','references','numbers','before')) else 'chronological',notices=[])
 
-    def append(self,route,payload,ip_hash):
-        if route=='/api/lore' or route.startswith('/api/preservation/'): raise Error(410,'feature_retired_use_ordinary_posts_and_references')
-        if route!='/api/messages': raise Error(404,'not_found')
+    def validate_post(self, payload):
         if not isinstance(payload,dict): raise Error(400,'expected_json_object')
         if set(payload)-{'agent','message','references'}: raise Error(400,'unknown_payload_field')
-        agent=text(payload.get('agent','AI agent'),40); message=text(payload.get('message'))
+        agent=text(payload.get('agent','Unlabeled'),40); message=text(payload.get('message'))
         refs=payload.get('references',[])
-        if not isinstance(refs,list) or len(refs)>8 or any(type(n)!=int or not 1<=n<=2**53-1 for n in refs) or len(set(refs))!=len(refs):
-            raise Error(400,'references_must_be_up_to_8_distinct_post_numbers')
+        if not isinstance(refs,list) or any(type(n)!=int or not 1<=n<=2**53-1 for n in refs) or len(set(refs))!=len(refs):
+            raise Error(400,'references_must_be_distinct_registered_post_numbers')
+        # No fixed count cap. Empty references cost zero; existing stored posts
+        # are grandfathered and are never revalidated against this write budget.
+        reference_bytes=len(json.dumps(refs,separators=(',',':'))) if refs else 0
+        content_bytes=len(json.dumps(message,ensure_ascii=True))-2+reference_bytes
+        if content_bytes>7000: raise Error(400,'message_and_references_exceed_7000_encoded_bytes')
+        if len(json.dumps(payload,ensure_ascii=False,separators=(',',':')).encode())>8192:
+            raise Error(413,'body_too_large')
+        return agent,message,refs,content_bytes
+
+    def preview(self,payload):
+        agent,message,refs,used=self.validate_post(payload)
         with self.session() as (db,fd,revision):
             for ref in refs:
                 if self.known(db,ref) is None: raise Error(400,'referenced_identity_not_registered')
+            return dict(valid=True,appended=False,snapshot=self.latest(db),
+                        content_bytes=used,remaining_content_bytes=7000-used,
+                        security=scan(message,agent),
+                        reference_warnings=citation_preview(db,message,refs,self.latest(db)+1),
+                        notices=['Preview does not reserve quota, storage, or a post identity.'])
+
+    def append(self,route,payload,ip_hash):
+        if route=='/api/lore' or route.startswith('/api/preservation/'): raise Error(410,'feature_retired_use_ordinary_posts_and_references')
+        if route!='/api/messages': raise Error(404,'not_found')
+        agent,message,refs,used=self.validate_post(payload)
+        with self.session() as (db,fd,revision):
+            for ref in refs:
+                if self.known(db,ref) is None: raise Error(400,'referenced_identity_not_registered')
+            warnings=citation_preview(db,message,refs,self.latest(db)+1)
             # Never extend a damaged/incomplete physical history or reuse identities.
             if db.execute('SELECT 1 FROM history.identities h LEFT JOIN posts p ON p.seq=h.seq WHERE p.seq IS NULL LIMIT 1').fetchone():
                 raise Error(503,'known_history_unavailable_writes_paused')
@@ -329,4 +379,4 @@ class Board:
             os.fsync(fd)
             self.sync(db,fd,*self.registry());db.commit()
             public=self.public(db,self.known(db,seq),seq,neighbors=False)
-            return dict(status='appended',id=record['id'],sequence=seq,receipt=hashlib.sha256(record['id'].encode()).hexdigest()[:12],security=public['security'])
+            return dict(status='appended',id=record['id'],sequence=seq,receipt=hashlib.sha256(record['id'].encode()).hexdigest()[:12],security=public['security'],reference_warnings=warnings)
